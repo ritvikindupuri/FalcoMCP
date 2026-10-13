@@ -310,7 +310,7 @@ def append_falco_exception_to_file(
     """[Path 1 & 2] Append or merge a structured exception into a local falco_rules.local.yaml file.
     
     Preserves existing rules and YAML formatting, merging values if the exception
-    already exists. Enforces strict extension validation (.yaml, .yml).
+    already exists. Enforces strict extension validation (.yaml, .yml, .json).
     """
     safe_path = _validate_safe_path(file_path, ALLOWED_RULE_EXTENSIONS)
     yaml_parser = YAML()

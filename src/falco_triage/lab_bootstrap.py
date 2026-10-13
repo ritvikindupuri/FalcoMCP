@@ -306,7 +306,7 @@ class LabBootstrapper:
             "--name", "falcosidekick",
             "--network", network_name,
             "-p", f"{daemon_port}:2801",
-            "-e", f"WEBUI_URL=http://falcosidekick-ui:{ui_port}",
+            "-e", "WEBUI_URL=http://falcosidekick-ui:2802",
             "--restart", "unless-stopped",
             "falcosecurity/falcosidekick:latest",
         ]

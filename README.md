@@ -11,16 +11,16 @@ An intelligent Model Context Protocol (MCP) server and agentic plugin engineered
 ## Key Features
 
 * **Production-Grade Alert Ingestion**: Reads alerts over HTTP from the Falcosidekick UI API (`:2802/api/v1/events/search`, falling back to `/api/v1/events`) or from a local Falco JSON log (e.g. `/var/log/falco_events.json`). The Falcosidekick daemon (`:2801`) is only used for health checks and lab test-alert POSTs.
-* **Multi-Dimensional Noise Clustering**: Groups repetitive alerts across rules, priorities, namespaces, process names, command lines, and container image repositories to identify top sources of alert fatigue.
+* **Multi-Dimensional Noise Clustering**: Groups alerts by `(rule, priority)`, ranks the groups by count, and lists the namespaces, pods, process names (falling back to the first token of `proc.cmdline`), and container image repositories seen in each group to identify top sources of alert fatigue.
 * **Deep Kubernetes Workload Correlation**: Connects to the active cluster via the official Kubernetes API client (`~/.kube/config`, or in-cluster config when running inside a pod) and reads (read-only) the Pod's container specs, security contexts (`privileged`, capabilities, read-only root filesystem), `hostPath` volumes, labels, and owner references.
-* **CNCF Falco 0.35+ Structured Exception Engine**: Automatically synthesizes precision, least-privilege exception blocks (`append: true`, `fields`, `comps`, `values`) and merges them into existing `falco_rules.local.yaml` files while preserving comments and YAML structure.
+* **CNCF Falco 0.35+ Structured Exception Engine**: Automatically synthesizes precision, least-privilege exception blocks (`append: true`, `fields`, `comps`, `values`) and merges them into existing `falco_rules.local.yaml` files using a `ruamel.yaml` round-trip load/dump (existing rules are kept; comments generally survive, but formatting may be normalized).
 * **Pre-Flight Filtercheck Rule Validator**: Validates rule/exception YAML (automatically inside `generate_falco_exception`, or on demand via `validate_falco_rule`), checking syntax, operator compatibility, tuple length alignment, and official Falco filtercheck fields (`proc.*`, `fd.*`, `container.*`, `k8s.*`, `user.*`, `evt.*`) with fuzzy typo suggestions.
 * **Quarantine Manifest Generation**: Generates a locked-down Kubernetes `NetworkPolicy` (deny all ingress and egress except DNS on port 53) plus the matching `kubectl apply` command. The YAML is returned only; nothing is applied to the cluster.
 * **Approval Flags**: Tools that write the rules file or produce a quarantine policy return `requires_human_approval: true` and `approval_options: [Allow, Deny, Always]`. Enforcing that approval is up to the MCP client.
 * **Two Dedicated Operational Paths**:
   * **Path 1 (Live Cluster Triage)**: Triage active clusters, tune noisy production rules, and generate quarantine policies for suspicious pods.
   * **Path 2 (Zero-to-One Sandbox Bootstrap)**: Use Docker, Kind, kubectl, and Helm to start Falcosidekick (+ UI), create a Kind cluster, deploy sample pods, install Falco, and POST realistic test alerts.
-* **Universal Plugin Packaging**: Operates as both a standalone MCP server and a full Antigravity / Claude Code plugin bundling runbooks (`SKILL.md`) and hard security guardrails (`rules/AGENTS.md`).
+* **Plugin Assets**: Runs as a standalone stdio MCP server; the repo also ships a minimal `plugin.json` manifest, a runbook (`skills/falco-triage/SKILL.md`), and agent guardrail instructions (`rules/AGENTS.md`). The guardrails are instructions for the AI client, not checks enforced by the server code.
 
 ---
 
@@ -55,7 +55,7 @@ Legend: blue = read, orange = write / execute, dashed = generated, not applied.
 | :--- | :--- | :--- |
 | **Protocol & Agent** | Model Context Protocol (`mcp>=1.0.0`, locked 2.3.0; code uses `mcp.server.mcpserver.MCPServer`), Python 3.10+ | High-performance JSON-RPC tool and prompt routing |
 | **Runtime Client** | `httpx>=0.27.0` (locked 0.28.1), `asyncio` | Asynchronous communication with Falcosidekick REST endpoints |
-| **Kubernetes API** | `kubernetes>=30.0.0` (locked 37.0.0, official client); PyYAML (imported by `k8s_client.py` but not declared in `pyproject.toml`; installed transitively, locked 6.0.3) | Cluster authentication, Pod inspection, NetworkPolicy YAML generation |
+| **Kubernetes API** | `kubernetes>=30.0.0` (locked 37.0.0, official client); `PyYAML>=6.0` (locked 6.0.3; used by `k8s_client.py` to render NetworkPolicy YAML) | Cluster authentication, Pod inspection, NetworkPolicy YAML generation |
 | **YAML Engine** | `ruamel.yaml>=0.18.0` (locked 0.19.1) | Comment-preserving, schema-accurate Falco YAML generation |
 | **Data Validation** | `pydantic>=2.0.0` (locked 2.13.5; declared but not imported directly by `src/`) | Used through the MCP SDK |
 | **Package Management** | `uv`, `hatchling` | Ultra-fast virtualenv creation and deterministic dependency resolution |
@@ -246,7 +246,7 @@ docker run -d --name falco \
 #### How Falco-Triage Connects to Your Falco Installation
 Once Falco is installed per above:
 1. **Live Falcosidekick UI API**: Alerts are read from port `2802` (`http://localhost:2802/api/v1/events/search`). Port `2801` (Falcosidekick daemon) is only used for `/healthz` checks and lab test-alert POSTs.
-2. **Local Falco Event Logs**: If running as a standalone service, Falco outputs JSON logs to `/var/log/falco_events.json`. Falco-Triage can ingest them directly using `ingest_falco_alerts(source="file", file_path="/var/log/falco_events.json")`.
+2. **Local Falco Event Logs**: If you enable Falco's JSON file output (`json_output: true` plus `file_output` in `falco.yaml`, writing to a path you choose such as `/var/log/falco_events.json`), Falco-Triage can ingest that file directly using `ingest_falco_alerts(source="file", file_path="/var/log/falco_events.json")`.
 3. **Local Testing/Sandbox Note**: For Windows/macOS laptops where Linux eBPF drivers cannot attach to the host kernel directly, you can run Falco in a local Kind/Minikube Linux VM, or use `bootstrap_falcosidekick_lab` + `dispatch_test_falco_alert` to simulate real Falco event flows without kernel privileges.
 
 ---
@@ -394,7 +394,7 @@ Add `falco-triage` to your global `~/.gemini/config/mcp_config.json`:
   }
 }
 ```
-> *To enable companion skills and rules in Antigravity, copy the plugin folder into `~/.gemini/config/plugins/falco-triage/`.*
+> *The companion runbook (`skills/falco-triage/SKILL.md`) and guardrails (`rules/AGENTS.md`) are plain Markdown files; load them however your client supports skills/rules. (A specific Antigravity plugin directory is not verified here.)*
 
 ---
 
@@ -447,9 +447,12 @@ For custom agents using Python or Node.js to spawn MCP processes over stdio:
 * **Executable**: `uv`
 * **Invocation Arguments**: `["--directory", "/path/to/FalcoMCP", "run", "falco-triage"]`
 * **Direct Python Binary Alternative**:
-  * Command: `/path/to/falco-triage-mcp/.venv/bin/python` (or `.venv\Scripts\python.exe` on Windows)
+  * Command: `/path/to/FalcoMCP/.venv/bin/python` (or `C:\path\to\FalcoMCP\.venv\Scripts\python.exe` on Windows)
   * Args: `["-m", "falco_triage.server"]`
-  * Environment: `{"PYTHONPATH": "/path/to/falco-triage-mcp/src"}`
+  * Environment: `{"PYTHONPATH": "/path/to/FalcoMCP/src"}`
+
+> [!NOTE]
+> The repository's own `mcp_config.json` uses this direct-Python form but hardcodes the author's Windows paths (`C:\Users\ritvi\.gemini\antigravity\scratch\falco-triage-mcp\...`). If you copy it, replace both the `command` and `PYTHONPATH` values with the paths of your own clone and virtualenv.
 
 ---
 
@@ -483,7 +486,7 @@ The moment you ask your assistant *"What is the Falco MCP server and what tools 
 In your AI chat (Cursor, Claude Code, Antigravity), type:
 > *"Run `ingest_falco_alerts` to pull recent alerts from our Falcosidekick deployment at `http://localhost:2802` and show me the noisiest rules."*
 
-* **What happens**: The agent queries `/api/v1/events/search`, clusters repetitive events by signature, and shows a ranked breakdown of noisy rules, affected namespaces, pods, and command lines.
+* **What happens**: The agent queries `/api/v1/events/search` (falling back to `/api/v1/events` on 404), groups events by rule and priority, and shows a ranked breakdown of noisy rules with their affected namespaces, pods, process names, and image repositories.
 
 #### Step 2: Correlate with Live Pod Metadata
 Pick a noisy rule (e.g. `Write below etc` on pod `node-exporter-4k2ln`) and type:
@@ -527,10 +530,11 @@ Simply copy and paste this prompt into your AI chat:
 3. **Sample Test Pod Provisioning (`deploy_sample_k8s_workloads`)**: Deploys realistic sample workloads to test against:
    * `default/web-frontend`: Nginx web server deployment.
    * `monitoring/node-exporter`: Prometheus node-exporter deployment.
-4. **High-Fidelity Alert Simulation (`dispatch_test_falco_alert`)**: Injects real CNCF Falco runtime security alerts targeting those exact pods:
-   * A `Write below etc` alert originating from `node-exporter` writing to `/etc/resolv.conf`.
-   * A `Terminal shell in container` alert originating from `bash` inside `web-frontend`.
-   * Templates available: `shell_in_container`, `write_below_etc`, `read_sensitive_file`.
+4. **Alert Simulation (`dispatch_test_falco_alert`)**: POSTs a sample Falco event payload to the Falcosidekick daemon (default `http://localhost:2801/`):
+   * `write_below_etc`: `node-exporter` writing to `/etc/resolv.conf` (namespace `monitoring`).
+   * `shell_in_container`: `bash` inside an `nginx:1.25` container (namespace `default`).
+   * `read_sensitive_file`: `datadog-agent` reading `/etc/shadow` (namespace `datadog`).
+   * The templates carry fixed sample pod names (e.g. `web-frontend-79f8b4d6b-x9zlq`, `node-exporter-daemon-4k2ln`), not the names of the pods just deployed. Pass `k8s_pod` (and optionally `k8s_ns`, `proc_name`, `container_image`) to point an alert at a real pod.
 5. **Live Triage Walkthrough**: The alert appears in the UI (`http://localhost:2802`). The agent queries it back with `ingest_falco_alerts`, inspects the sample pod with `correlate_k8s_workload`, and guides you through tuning your first exception!
 
 ---
@@ -568,13 +572,13 @@ Type:
 Type:
 > *"Here is an alert firing in production: `node-exporter opened /etc/resolv.conf for writing in namespace monitoring`. Write a least-privilege exception for it."*
 
-* **What happens**: The agent invokes `generate_falco_exception` and returns valid CNCF Falco 0.35+ YAML**with zero running cluster required**.
+* **What happens**: The agent turns the pasted alert into an `output_fields` sample (e.g. `k8s.ns.name`, `proc.name`, `fd.name`), calls `generate_falco_exception`, and returns the exception YAML plus its validation report, **with no running cluster required**. Fields missing from the sample are filled with placeholders (`default` namespace, `unknown` image, `/var/log` path), so supply them for a precise exception.
 
 #### 2. Pre-Flight Linter & Typo Checker
 Type:
 > *"Check this custom Falco rule for syntax errors or typos: `- rule: Test; append: true; exceptions: [{name: test, fields: [proc.nme], comps: [=], values: [bash]}]`"*
 
-* **What happens**: The agent runs `validate_falco_rule`, catches the typo (`proc.nme`), and suggests the correct field (`proc.name`).
+* **What happens**: The agent runs `validate_falco_rule`, which flags `proc.nme` as a WARNING (it has a known `proc.` prefix, so the result is still `valid: true`) and suggests `proc.name`. Fields without a known prefix are reported as ERRORs.
 
 #### 3. Offline JSON Audit File Analysis
 Type:
@@ -586,11 +590,11 @@ Type:
 ## Testing & Quality Assurance
 
 The test suite includes 16 automated tests covering:
-* **Exception Engine**: Multi-field tuple generation, single-field scoping, least-privilege strategies, and comment-preserving YAML merging.
+* **Exception Engine**: Multi-field exception construction, least-privilege synthesis (including `fd.name` when file paths are present), and append-then-merge into a YAML file (comment preservation is not asserted).
 * **Rule Validator**: Filtercheck dictionary checks, fuzzy typo detection (`proc.cmdlie` $\rightarrow$ `proc.cmdline`), and operator dimension alignment.
-* **Alert Ingestion**: JSON log parsing, multi-cluster frequency calculations, and live API queries.
-* **Kubernetes Client**: Dynamic NetworkPolicy generation and graceful offline fallbacks.
-* **Integration**: Server-level calls to 6 of the 13 tools (`check_lab_environment`, `validate_falco_rule`, `generate_falco_exception`, `append_falco_exception_to_file`, `ingest_falco_alerts`, `generate_pod_isolation_policy`) and 4 of the 5 prompts (all except `isolate_compromised_pod`).
+* **Alert Ingestion**: Event parsing, JSON log file loading, and alert clustering. (Falcosidekick UI API queries are not tested.)
+* **Kubernetes Client**: NetworkPolicy generation (runs without a reachable cluster).
+* **Integration**: Server-level calls to 6 of the 13 tools (`check_lab_environment`, `validate_falco_rule`, `generate_falco_exception`, `append_falco_exception_to_file`, `ingest_falco_alerts`, `generate_pod_isolation_policy`) and all 5 prompts. `test_server_check_lab_environment` probes the local Docker/Kubernetes/Falcosidekick endpoints but passes whether or not they are up.
 
 Run the tests anytime:
 ```bash

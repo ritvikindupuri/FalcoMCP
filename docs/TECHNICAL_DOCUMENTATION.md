@@ -19,8 +19,8 @@
    - [4.2 Live Alert Ingestion & Noise Clustering Engine](#42-live-alert-ingestion--noise-clustering-engine)
    - [4.3 Kubernetes Workload Context Correlation](#43-kubernetes-workload-context-correlation)
    - [4.4 CNCF Falco 0.35+ Structured Exception Engine](#44-cncf-falco-035-structured-exception-engine)
-   - [4.5 Pre-Flight AST & Filtercheck Rule Validator](#45-pre-flight-ast--filtercheck-rule-validator)
-   - [4.6 Active Threat Containment & Quarantine Generator](#46-active-threat-containment--quarantine-generator)
+   - [4.5 Pre-Flight Schema & Filtercheck Rule Validator](#45-pre-flight-schema--filtercheck-rule-validator)
+   - [4.6 Quarantine NetworkPolicy Generator (YAML Only)](#46-quarantine-networkpolicy-generator-yaml-only)
    - [4.7 Automated Lab Bootstrapper & Alert Simulator](#47-automated-lab-bootstrapper--alert-simulator)
 5. [Comprehensive Setup & Client Integration Matrix](#5-comprehensive-setup--client-integration-matrix)
    - [5.1 Infrastructure Bootstrapping (Docker & Kubernetes)](#51-infrastructure-bootstrapping-docker--kubernetes)
@@ -39,7 +39,7 @@ In containerized cloud-native environments, **Falco** is the de facto CNCF stand
 
 Tuning Falco rules safely requires authoring complex YAML overrides using CNCF Falco 0.35+ structured exceptions (`append: true`, `fields`, `comps`, `values`). A single syntax error or typo in filtercheck field names (e.g. typing `proc.nme` instead of `proc.name`) can crash the Falco daemon (`CrashLoopBackOff`), while overly broad exceptions create massive security blind spots.
 
-**Falco-Triage** bridges this gap. It is an agentic, AI-powered runtime security platform packaged as an official **Plugin** and **Model Context Protocol (MCP)** server. Falco-Triage operates with **zero mock data**, directly interfacing with live Falcosidekick HTTP endpoints, active Kubernetes API clusters, and local Falco configuration files. It enables security engineers to either triage live production clusters (Path 1) or bootstrap complete isolated testing sandboxes from scratch using natural language (Path 2).
+**Falco-Triage** bridges this gap. It is a **Model Context Protocol (MCP)** server (stdio) with companion plugin assets (`plugin.json`, `skills/falco-triage/SKILL.md`, `rules/AGENTS.md`). It reads alerts from live Falcosidekick UI HTTP endpoints or local Falco JSON logs, reads Pod data from the Kubernetes API (read-only), and writes exceptions to local Falco rules files. Lab test alerts are fixed sample payloads (`REAL_FALCO_EVENT_TEMPLATES` in `lab_bootstrap.py`). It enables security engineers to either triage live production clusters (Path 1) or bootstrap complete isolated testing sandboxes from scratch using natural language (Path 2).
 
 ---
 
@@ -53,25 +53,24 @@ The Falco-Triage platform operates as a multi-tier, decoupled architecture inter
 graph TB
     subgraph ClientLayer ["1. Client & Agent Layer"]
         User["Container Security Engineer"]
-        Agent["AI Assistant (Antigravity / Claude Code)"]
+        Agent["MCP client / AI assistant<br/>(Claude Code / Cursor / Antigravity)"]
         User -->|"Natural Language Query"| Agent
     end
 
-    subgraph PluginLayer ["2. Falco-Triage Plugin & MCP Server"]
-        Router["Transport Dispatcher (stdio / JSON-RPC)"]
-        SkillGuide["SKILL.md (Triage SOP & Runbook)"]
-        Guardrails["AGENTS.md (Security Guardrails)"]
-        
-        Agent -->|"Inspects SOP"| SkillGuide
-        Agent -->|"Enforces Rules"| Guardrails
+    subgraph PluginLayer ["2. Falco-Triage MCP Server"]
+        Router["MCPServer (stdio)<br/>13 tools + 5 prompts"]
+        SkillGuide["SKILL.md (Triage Runbook)"]
+        Guardrails["AGENTS.md (Agent Instructions)"]
+
+        Agent -->|"Reads runbook"| SkillGuide
+        Agent -->|"Follows instructions"| Guardrails
         Agent -->|"Invokes Tools"| Router
 
         subgraph CoreSubsystems ["Core Subsystems"]
-            Ingestor["Alert Ingestion Engine<br/>(falco_client.py)"]
-            Correlator["K8s Workload Correlator<br/>(k8s_client.py)"]
+            Ingestor["Alert Ingestion<br/>(falco_client.py)"]
+            Correlator["K8s Workload Correlator<br/>+ NetworkPolicy Generator<br/>(k8s_client.py)"]
             ExceptionGen["Structured Exception Engine<br/>(exception_engine.py)"]
-            Validator["Rule AST & Schema Validator<br/>(rule_validator.py)"]
-            Isolator["NetworkPolicy Isolator<br/>(k8s_client.py)"]
+            Validator["Rule Schema Validator<br/>(rule_validator.py)"]
             Bootstrapper["Lab Bootstrapper<br/>(lab_bootstrap.py)"]
         end
 
@@ -79,24 +78,25 @@ graph TB
         Router --> Correlator
         Router --> ExceptionGen
         Router --> Validator
-        Router --> Isolator
         Router --> Bootstrapper
     end
 
     subgraph InfrastructureLayer ["3. Target Infrastructure & Runtime"]
-        FalcosidekickUI["Falcosidekick UI API<br/>(:2802 /api/v1/events)"]
-        FalcosidekickDaemon["Falcosidekick Daemon<br/>(:2801 /)"]
-        K8sAPI["Live Kubernetes API Server<br/>(~/.kube/config)"]
-        DockerEngine["Docker Engine Daemon<br/>(Local Desktop / Engine)"]
+        FalcosidekickUI["Falcosidekick UI<br/>(:2802 /api/v1/events/search)"]
+        FalcosidekickDaemon["Falcosidekick Daemon<br/>(:2801)"]
+        LogFile["Local Falco JSON log"]
+        K8sAPI["Kubernetes API Server<br/>(~/.kube/config or in-cluster)"]
+        CLIs["docker / kind / kubectl / helm CLIs"]
         RulesFile["falco_rules.local.yaml<br/>(Filesystem)"]
 
-        Ingestor -->|"GET /api/v1/events"| FalcosidekickUI
-        Bootstrapper -->|"POST /"| FalcosidekickDaemon
-        Correlator -->|"GET /api/v1/pods"| K8sAPI
-        Isolator -->|"POST NetworkPolicy"| K8sAPI
-        Bootstrapper -->|"Docker CLI / Kind"| DockerEngine
-        ExceptionGen -->|"ruamel.yaml append"| RulesFile
-        Validator -.->|"AST Linting"| ExceptionGen
+        Ingestor -->|"GET events"| FalcosidekickUI
+        Ingestor -->|"read file"| LogFile
+        Bootstrapper -->|"POST / (test alerts)"| FalcosidekickDaemon
+        Correlator -->|"read pod (read-only)"| K8sAPI
+        Correlator -.->|"NetworkPolicy YAML returned, never applied"| Agent
+        Bootstrapper -->|"subprocess"| CLIs
+        ExceptionGen -->|"ruamel.yaml merge (no re-validation)"| RulesFile
+        Validator -.->|"validates generated YAML"| ExceptionGen
     end
 ```
 
@@ -105,31 +105,34 @@ graph TB
 ### Component Specifications
 
 1. **Transport Dispatcher (`src/falco_triage/server.py`)**:
-   Built on the official Python Model Context Protocol (`mcp 2.3.0`) SDK using `MCPServer`. It exposes 10 high-performance tools and 4 interactive prompt workflows via standard I/O (stdio) JSON-RPC, enabling zero-latency communication with any MCP-compliant AI host.
+   Built on the Python MCP SDK (`mcp>=1.0.0` declared, 2.3.0 locked in `uv.lock`) using `mcp.server.mcpserver.MCPServer`. It exposes 13 tools and 5 prompts over stdio (`app.run(transport="stdio")`).
+   * **Tools (13)**: `check_lab_environment`, `bootstrap_falcosidekick_lab`, `bootstrap_kind_cluster`, `deploy_falcosidekick_to_kubernetes`, `deploy_sample_k8s_workloads`, `install_falco_to_kubernetes`, `dispatch_test_falco_alert`, `ingest_falco_alerts`, `correlate_k8s_workload`, `generate_falco_exception`, `append_falco_exception_to_file`, `validate_falco_rule`, `generate_pod_isolation_policy`.
+   * **Prompts (5)**: `path1_live_cluster_triage`, `path2_bootstrap_sandbox_lab`, `spin_up_sample_cluster_and_workloads`, `tune_noisy_rule`, `isolate_compromised_pod`.
+   * **Input hardening**: URL parameters must use `http`/`https` with a host; file paths are restricted by extension (`.yaml`/`.yml`/`.json` for rules files, `.json`/`.jsonl`/`.log`/`.txt` for logs). There is no directory allow-list.
 
 2. **Alert Ingestion Engine (`src/falco_triage/falco_client.py`)**:
-   Connects via asynchronous HTTP (`httpx`) to the live Falcosidekick UI REST API (`/api/v1/events/search`) or ingests local newline-delimited JSON (`JSONL`) Falco audit streams. Extracts raw `output_fields` and performs multi-dimensional clustering over alert tuples `(rule, priority, process, namespace, container)`.
+   Uses asynchronous HTTP (`httpx`) against the Falcosidekick UI API (`/api/v1/events/search`, falling back to `/api/v1/events` on 404), or reads a local line-delimited JSON file (each line an event object or an array of events; unparsable lines are skipped). Groups events by `(rule, priority)` and collects the namespaces, pods, processes, and image repositories seen in each group. The Falcosidekick daemon (`:2801`) is only used for `/healthz` checks and lab test-alert POSTs.
 
 3. **Kubernetes Workload Correlator (`src/falco_triage/k8s_client.py`)**:
-   Interfaces directly with the official Kubernetes Python API client (`kubernetes`). Authenticates via active `~/.kube/config` or in-cluster ServiceAccount. Retrieves detailed Pod metadata, container specs, controller ownership hierarchies, security contexts (`privileged`, `capabilities`, `readOnlyRootFilesystem`), host namespace attachments (`hostPID`, `hostNetwork`), and volume mounts.
+   Uses the official Kubernetes Python client, authenticating via `~/.kube/config` (optional path and context) or in-cluster config when `KUBERNETES_SERVICE_HOST` is set. Read-only: it calls `read_namespaced_pod` (plus version/node listing for connectivity checks). Returns container images, commands/args, security contexts (`privileged`, `allow_privilege_escalation`, `read_only_root_filesystem`, `run_as_user`, `run_as_non_root`, capabilities), host namespace flags (`host_network`, `host_pid`, `host_ipc`), `hostPath` volumes, labels, direct owner references, phase, and pod IP.
 
 4. **CNCF Falco Exception Engine (`src/falco_triage/exception_engine.py`)**:
-   Synthesizes production-grade structured exceptions conforming to CNCF Falco 0.35+ syntax. Uses `ruamel.yaml` to ensure non-destructive merging into existing `falco_rules.local.yaml` files, preserving comments, anchor structures, and indentation.
+   Synthesizes structured exceptions (`append: true`, `fields`, `comps`, `values`) from alert `output_fields`. Merges into an existing rules file via a `ruamel.yaml` round-trip load/dump: an exception with the same rule and name has new value rows appended; otherwise the exception or rule is added. Comments generally survive the round trip, but formatting may be normalized (comment preservation is not covered by tests).
 
-5. **AST & Filtercheck Rule Validator (`src/falco_triage/rule_validator.py`)**:
-   Performs pre-flight syntax and semantic analysis on Falco YAML rules. Validates filtercheck field names against Falco's complete dictionary (`proc.*`, `fd.*`, `container.*`, `k8s.*`, `user.*`, `evt.*`), checks comparison operator compatibility, and verifies tuple row-column alignments.
+5. **Rule Schema & Filtercheck Validator (`src/falco_triage/rule_validator.py`)**:
+   Parses YAML with `ruamel.yaml` and checks field names against a built-in list of 62 common filtercheck fields (`proc.*`, `fd.*`, `container.*`, `k8s.*`, `user.*`, `group.*`, `evt.*`), comparison operators, `fields`/`comps` length, and `values` row arity. It is not an AST parser and does not parse `condition` expressions.
 
 6. **NetworkPolicy Quarantine Generator (`src/falco_triage/k8s_client.py`)**:
-   Synthesizes production `networking.k8s.io/v1` `NetworkPolicy` manifests designed to isolate compromised pods dynamically, cutting off lateral ingress/egress while maintaining DNS resolution to prevent cluster-wide side effects.
+   Builds a `networking.k8s.io/v1` `NetworkPolicy` that denies all ingress and all egress except DNS (port 53 UDP/TCP to `kube-dns`/`coredns` pods). It returns the manifest, YAML (rendered with PyYAML), and a `kubectl apply` command; it never applies anything to the cluster.
 
 7. **Lab Bootstrapper & Simulator (`src/falco_triage/lab_bootstrap.py`)**:
-   Orchestrates local container and cluster runtimes. Manages Docker Desktop initialization, provisions `falcosecurity/falcosidekick` and `falcosecurity/falcosidekick-ui` containers on bridge networks, provisions Kind Kubernetes clusters on demand, and injects real-world Falco event payloads.
+   Runs `docker`, `kind`, `kubectl`, and `helm` as subprocesses: launches Docker Desktop (Windows default install path only), runs `falcosecurity/falcosidekick` and `falcosecurity/falcosidekick-ui` containers on the `falco-lab-net` Docker network, creates Kind clusters, applies Falcosidekick and sample-workload manifests with `kubectl apply`, installs Falco with Helm, and POSTs sample Falco events to the Falcosidekick daemon.
 
 ---
 
 ## 3. Agent Architecture
 
-Falco-Triage is designed around an **Autonomous Agentic Decision Loop**. Unlike passive tools that require engineers to manually specify every parameter, Falco-Triage leverages structured system rules (`rules/AGENTS.md`) and a declarative Standard Operating Procedure (`skills/falco-triage/SKILL.md`) to guide the model through investigation, threat determination, and remediation.
+Falco-Triage is designed to be driven by an AI agent. The decision-making happens in the MCP client: `rules/AGENTS.md` (agent instructions) and `skills/falco-triage/SKILL.md` (runbook) guide the model through investigation, threat determination, and remediation. The server itself only executes the tools it is asked to call.
 
 ### Agent Lifecycle Diagram
 
@@ -140,7 +143,7 @@ sequenceDiagram
     participant Agent as AI Agent (Claude/Antigravity)
     participant Skill as SKILL.md / AGENTS.md
     participant Tools as Falco-Triage MCP Tools
-    participant Cluster as K8s / Falco Runtime
+    participant Cluster as K8s API / Falcosidekick UI
 
     Engineer->>Agent: "Triage recent Falco alerts & tune noisy rules"
     Agent->>Skill: Load Falco-Triage SOP & Security Rules
@@ -149,44 +152,46 @@ sequenceDiagram
     Note over Agent: Phase 1: Ingestion & Clustering
     Agent->>Tools: ingest_falco_alerts(source="falcosidekick", limit=50)
     Tools->>Cluster: GET /api/v1/events/search
-    Cluster-->>Tools: 50 Real Falco Alerts
+    Cluster-->>Tools: Up to 50 alerts
     Tools-->>Agent: Top Alert Clusters (e.g. "Write below etc", count: 42)
 
     Note over Agent: Phase 2: Workload Correlation
-    Agent->>Tools: correlate_k8s_workload(namespace="monitoring", pod="node-exporter-4k2ln")
-    Tools->>Cluster: GET /api/v1/namespaces/monitoring/pods/...
+    Agent->>Tools: correlate_k8s_workload(namespace="monitoring", pod_name="node-exporter-4k2ln")
+    Tools->>Cluster: read_namespaced_pod (read-only)
     Cluster-->>Tools: Pod Spec (DaemonSet: prom/node-exporter, unprivileged)
     Tools-->>Agent: Workload Context & Security Profile
 
     Note over Agent: Phase 3: Assessment & Decision
-    Agent->>Agent: Evaluate MITRE Matrix & AGENTS.md Rules<br/>(Is this expected daemon activity? -> YES, Benign FP)
+    Agent->>Agent: Apply AGENTS.md instructions<br/>(Is this expected daemon activity? -> YES, Benign FP)
 
     Note over Agent: Phase 4: Exception Synthesis & Pre-flight
-    Agent->>Tools: generate_falco_exception(rule="Write below etc", strategy="least_privilege")
-    Tools-->>Agent: Generated YAML Exception Block
-    Agent->>Tools: validate_falco_rule(yaml_content)
-    Tools-->>Agent: Validation Result: VALID (0 errors)
+    Agent->>Tools: generate_falco_exception(rule_name="Write below etc", output_fields_samples=[...], strategy="least_privilege")
+    Tools-->>Agent: Exception dict + YAML + validation report
+    Agent->>Tools: validate_falco_rule(yaml_content) (optional re-check)
+    Tools-->>Agent: Validation Result: valid=true
 
-    Note over Agent: Phase 5: Committal & Report
-    Agent->>Tools: append_falco_exception_to_file("falco_rules.local.yaml", yaml_content)
-    Tools-->>Agent: File Updated (Merged: True)
-    Agent-->>Engineer: Comprehensive Triage Report & Git Diff
+    Note over Agent: Phase 5: Write & Report
+    Agent->>Tools: append_falco_exception_to_file(file_path="falco_rules.local.yaml", exception_yaml=...)
+    Tools-->>Agent: action="merged"/"appended" + requires_human_approval flag
+    Agent-->>Engineer: Triage report
 ```
 
 <p align="center"><b>Figure 2: Falco-Triage Agentic Decision & SOP Lifecycle</b></p>
 
+Note: `append_falco_exception_to_file` performs the write when it is called. Its `requires_human_approval: true` / `approval_options` fields are informational flags in the return value; enforcing approval before the call is the MCP client's job.
+
 ### Agent Reasoning & Guardrails
 
-The agent operates under four mandatory security guardrails defined in `rules/AGENTS.md`:
+`rules/AGENTS.md` gives the agent four security guidelines (plus a tool-overview template and approval-UX instructions). They are instructions to the AI client; the server code does not enforce them:
 
 1. **No Blanket Suppression of High-Severity Alerts**:  
-   Alerts marked `CRITICAL`, `ALERT`, or `EMERGENCY` (such as root escalation, container escape, or sensitive directory modification outside managed namespaces) cannot be silenced with broad process-only exceptions. The agent is forced to correlate workload ownership first.
+   Alerts marked `CRITICAL`, `ALERT`, or `EMERGENCY` must not be silenced with loose process-level exceptions; the agent is instructed to correlate the workload with `correlate_k8s_workload` first.
 2. **Least-Privilege Scoping Requirement**:  
-   Exceptions must not be bound solely to `proc.name`. The exception engine defaults to a 4-tuple constraint: `[k8s.ns.name, proc.name, container.image.repository, fd.name]`.
-3. **Mandatory Pre-Flight Validation**:  
-   The agent must never write unverified YAML directly into production rules files. It must pass the payload through `validate_falco_rule` first.
+   Exceptions should not be scoped solely by `proc.name`. The `least_privilege` strategy (the default) uses `[k8s.ns.name, proc.name, container.image.repository]`, adding `fd.name` (`startswith`) only when a sample contains `fd.name`. The `process_only` strategy still exists in code.
+3. **Pre-Flight Validation**:  
+   The agent is instructed to run `validate_falco_rule` before writing. `generate_falco_exception` validates its own output, but `append_falco_exception_to_file` writes whatever YAML it receives without validating it.
 4. **Active Threat Isolation Over Muting**:  
-   If an alert indicates an unexpected interactive shell (`Terminal shell in container`) or abnormal egress from an unverified image, the agent rejects suppression and immediately presents an isolation `NetworkPolicy`.
+   For unexpected interactive shells or anomalous egress from unknown images, the agent is instructed to propose a `generate_pod_isolation_policy` NetworkPolicy (YAML only) instead of muting the alert.
 
 ---
 
@@ -196,32 +201,34 @@ The agent operates under four mandatory security guardrails defined in `rules/AG
 
 Falco-Triage supports two distinct user paths out of the box:
 
-* **Path 1: Live Cluster Triage & Rule Tuning**: Designed for organizations with Falco, Falcosidekick, and Kubernetes active in staging or production. The agent attaches to running endpoints, clusters live alert streams, inspects active pods, and patches `falco_rules.local.yaml`.
-* **Path 2: Zero-to-One Sandbox Lab Bootstrap**: Designed for engineers who need a clean, fresh local testing sandbox without manual configuration. With a single natural language prompt, the agent starts Docker Desktop, creates a local Kind cluster, deploys Falcosidekick, and dispatches realistic sample alert payloads.
+* **Path 1: Live Cluster Triage & Rule Tuning**: For environments with Falco, Falcosidekick, and Kubernetes already running. The agent reads alerts from the Falcosidekick UI, clusters them, reads pod details (read-only), writes exceptions to a local `falco_rules.local.yaml`, and can generate (not apply) quarantine NetworkPolicies.
+* **Path 2: Zero-to-One Sandbox Lab Bootstrap**: For engineers who want a local test sandbox. Requires the `docker`, `kind`, `kubectl` (and optionally `helm`) CLIs. The agent can launch Docker Desktop (Windows default path only; re-run the tool once it is up), create a Kind cluster, deploy Falcosidekick (+ UI) and sample workloads, install Falco via Helm, and POST sample alert payloads.
 
 ---
 
 ### 4.2 Live Alert Ingestion & Noise Clustering Engine
 
-The `ingest_falco_alerts` subsystem ingests alerts without mock data:
-* **Real REST Ingestion**: Queries the Falcosidekick UI API with parameters `rule`, `priority`, `limit`, and `page`.
-* **Real JSON File Streaming**: Ingests newline-delimited JSON audit logs produced by Falco file outputs (`json_output: true`).
-* **Noise Clustering**: Groups events by `(rule, priority)` and computes statistical aggregates:
-  * Distinct namespaces and pods affected.
-  * Unique process names and command lines (`proc.cmdline`).
-  * Unique container image repositories.
-  * Sample output field payloads for downstream exception synthesis.
+The `ingest_falco_alerts` tool:
+* **REST Ingestion** (`source="falcosidekick"`, default): Queries the Falcosidekick UI API (`<ui_url>/api/v1/events/search`, falling back to `/api/v1/events` on 404) with query parameters `rule`, `priority`, `limit`, and `page` (always 1 from the tool). Results are also substring-filtered client-side by `rule_filter` / `priority_filter`.
+* **JSON File Ingestion** (`source="file"`): Reads a line-delimited JSON file such as Falco's JSON file output (`json_output: true` with `file_output` enabled). Allowed extensions: `.json`, `.jsonl`, `.log`, `.txt`.
+* **Noise Clustering**: Groups events by `(rule, priority)`, sorted by count (descending), and for each group reports:
+  * Distinct namespaces and pods (pods truncated to 5 in the tool output).
+  * Distinct process names (`proc.name`, or the first token of `proc.cmdline` when `proc.name` is absent).
+  * Distinct container image repositories (or `container.image` when no repository field is present).
+  * First/last seen timestamps, and up to 2 sample outputs and `output_fields` payloads for exception synthesis.
+* The tool returns at most the top 10 clusters.
 
 ---
 
 ### 4.3 Kubernetes Workload Context Correlation
 
-The `correlate_k8s_workload` subsystem executes deep security profiling against active Kubernetes pods:
-* **Privilege Analysis**: Inspects `securityContext.privileged`, `allowPrivilegeEscalation`, and `readOnlyRootFilesystem`.
-* **Capabilities Inspection**: Extracts lists of added and dropped Linux capabilities (`CAP_SYS_ADMIN`, `CAP_NET_RAW`, etc.).
-* **Host Contamination**: Detects dangerous host bindings (`hostNetwork: true`, `hostPID: true`, `hostIPC: true`).
-* **Mount Auditing**: Identifies all `hostPath` volumes and their mount targets on the host node.
-* **Ownership Hierarchy**: Resolves `ownerReferences` from ephemeral Pods up to parent ReplicaSets, Deployments, DaemonSets, StatefulSets, or CronJobs.
+The `correlate_k8s_workload` tool reads a single Pod (read-only `read_namespaced_pod`) and reports:
+* **Privilege Analysis**: per-container `privileged`, `allow_privilege_escalation`, `read_only_root_filesystem`, `run_as_user`, `run_as_non_root`.
+* **Capabilities Inspection**: lists of added and dropped Linux capabilities.
+* **Host Namespaces**: `host_network`, `host_pid`, `host_ipc`.
+* **Host Mounts**: `hostPath` volumes (name, host path, type) from the Pod spec.
+* **Ownership**: the Pod's direct `ownerReferences` (kind, name, controller), e.g. a ReplicaSet or DaemonSet. It does not walk further up the ownership chain.
+* If the Pod does not exist it returns `found: false`; if the client cannot initialize it returns `found: false` with the error.
 
 ---
 
@@ -241,45 +248,54 @@ The `generate_falco_exception` and `append_falco_exception_to_file` subsystems i
 ```
 
 #### Supported Scoping Strategies:
-1. **`least_privilege` (Default)**: Combines `k8s.ns.name`, `proc.name`, `container.image.repository`, and `fd.name` (with `startswith`).
+1. **`least_privilege` (Default)**: Combines `k8s.ns.name`, `proc.name`, and `container.image.repository` (`=`), plus `fd.name` (`startswith`) only if any sample contains `fd.name`.
 2. **`namespace_process`**: Combines `k8s.ns.name` and `proc.name`.
 3. **`container_process`**: Combines `container.image.repository` and `proc.name`.
-4. **`process_only`**: Scoped to `proc.name` only (restricted by security guardrails).
+4. **`process_only`**: Scoped to `proc.name` only (allowed by the code; `rules/AGENTS.md` tells the agent not to use it).
+
+Missing sample values are filled in: `proc.name` from the first token of `proc.cmdline`, `container.image.repository` from `container.image` (tag stripped), otherwise `default` for `k8s.ns.name`, `/var/log` for `fd.name`, and `unknown` for anything else. The default exception name is `allow_<process>_<rule>` (truncated to 50 characters).
+
+`append_falco_exception_to_file` parses the supplied YAML (taking the first item if it is a list) and merges it into the target file **without validating it**. The path must end in `.yaml`, `.yml`, or `.json`. The return value includes `requires_human_approval: true` and `approval_options: [Allow, Deny, Always]`, which are informational only; the file has already been written when they are returned.
 
 ---
 
-### 4.5 Pre-Flight AST & Filtercheck Rule Validator
+### 4.5 Pre-Flight Schema & Filtercheck Rule Validator
 
-The `validate_falco_rule` tool prevents runtime crashes by verifying:
-1. **YAML Validity**: Validates parsing and document structures using `ruamel.yaml`.
-2. **Filtercheck Field Names**: Verifies field names against Falco's core dictionary (`proc.*`, `fd.*`, `container.*`, `k8s.*`, `user.*`, `evt.*`). Automatically suggests fuzzy corrections for typos (e.g. `proc.cmdlie` $\rightarrow$ `proc.cmdline`).
-3. **Operator Validity**: Checks comparison operators (`=`, `!=`, `in`, `pmatch`, `startswith`, `endswith`, `contains`, `intersects`).
-4. **Tuple Dimensions**: Ensures `len(comps) == len(fields)` and verifies that every row in `values` matches the tuple arity.
-5. **Base Rule Attributes**: Validates mandatory keys (`condition`, `output`, `priority`) if full rules are submitted.
+The `validate_falco_rule` tool (also run automatically inside `generate_falco_exception`) checks:
+1. **YAML Validity**: The document parses with `ruamel.yaml`, is non-empty, and every item is a mapping with a `rule`, `macro`, or `list` key.
+2. **Filtercheck Field Names**: Exception `fields` are checked against a built-in list of 62 common fields. Unknown fields with a known prefix (`proc.`, `fd.`, `container.`, `k8s.`, `user.`, `group.`, `evt.`, `syslog.`) are WARNINGs (the result can still be `valid: true`) with a fuzzy suggestion (e.g. `proc.cmdlie` -> `proc.cmdline`); other unknown fields are ERRORs.
+3. **Operator Validity**: `comps` must be one of `=`, `==`, `!=`, `in`, `pmatch`, `startswith`, `endswith`, `glob`, `contains`, `icontains`, `intersects`, `<`, `<=`, `>`, `>=`.
+4. **Tuple Dimensions**: `len(comps) == len(fields)` and, for multi-field exceptions, every row in `values` has the same arity.
+5. **Base Rule Attributes**: For rules without `append: true`, requires `condition`, `output`, and a valid `priority`.
+
+It does not parse `condition` expressions or load the rules into Falco, so it cannot guarantee Falco will accept the file.
 
 ---
 
-### 4.6 Active Threat Containment & Quarantine Generator
+### 4.6 Quarantine NetworkPolicy Generator (YAML Only)
 
-When active exploitation is detected, `generate_pod_isolation_policy` creates a production Kubernetes `NetworkPolicy`:
-* Dynamically extracts the pod's specific labels (`app.kubernetes.io/name`, `app`, etc.).
-* Sets `policyTypes: ["Ingress", "Egress"]`.
-* Sets `ingress: []` (drops all incoming traffic).
-* Restricts `egress` to UDP/TCP port 53 targeting `kube-dns` and `coredns` pods only.
-* Emits a copy-and-paste `kubectl apply` command.
+`generate_pod_isolation_policy` builds a Kubernetes `NetworkPolicy` and returns it; it never applies it:
+* Reads the Pod's labels (read-only) if the cluster is reachable and picks one selector label: `app.kubernetes.io/name`, else `app`, else the first label. If the Pod cannot be read, it falls back to `app: <pod_name>`.
+* Names the policy `quarantine-<first 30 chars of pod name>` and labels it `secops.falco.io/quarantine: "true"`.
+* Sets `policyTypes: ["Ingress", "Egress"]` and `ingress: []` (deny all ingress).
+* With `allow_dns=true` (default), allows egress only to UDP/TCP port 53 on `k8s-app: kube-dns` / `k8s-app: coredns` pods in any namespace; with `allow_dns=false`, all egress is denied.
+* Returns `manifest_dict`, `yaml` (rendered with PyYAML), and a `kubectl apply` heredoc command for you to run after review, plus informational `requires_human_approval` / `approval_options` flags.
 
 ---
 
 ### 4.7 Automated Lab Bootstrapper & Alert Simulator
 
-The `lab_bootstrap.py` subsystem enables turnkey local sandbox provisioning:
-* **Docker Desktop Management**: Tests whether Docker Engine is active; launches the Windows service if stopped.
-* **Container Provisioning**: Deploys `falcosecurity/falcosidekick` and `falcosecurity/falcosidekick-ui` onto an isolated Docker network (`falco-lab-net`).
-* **Kubernetes Manifest Deployment**: Injects native deployment manifests into active Kubernetes clusters via `kubectl apply`.
-* **High-Fidelity Event Injection**: Dispatches realistic Falco event payloads directly to `POST :2801/`:
-  * `shell_in_container`: Spawning of interactive bash inside an Nginx pod.
-  * `write_below_etc`: Prometheus node-exporter writing to `/etc/resolv.conf`.
-  * `read_sensitive_file`: Datadog agent reading `/etc/shadow`.
+The `lab_bootstrap.py` module backs the Path 2 tools:
+* **Docker check / start** (`check_lab_environment`, `bootstrap_falcosidekick_lab`): Runs `docker info`. If Docker is not running, `bootstrap_falcosidekick_lab` launches `C:\Program Files\Docker\Docker\Docker Desktop.exe` (Windows default path only) and asks you to re-run the tool.
+* **Container Provisioning** (`bootstrap_falcosidekick_lab`): Creates the `falco-lab-net` Docker network, removes any existing `falcosidekick` / `falcosidekick-ui` containers, and runs `falcosecurity/falcosidekick:latest` (`daemon_port`, default 2801) and `falcosecurity/falcosidekick-ui:latest` (`ui_port`, default 2802) with `--restart unless-stopped`. `daemon_port`/`ui_port` only set the host port mappings; inside `falco-lab-net` the daemon always reaches the UI at `http://falcosidekick-ui:2802`.
+* **Kind Cluster** (`bootstrap_kind_cluster`): `kind create cluster --name <cluster_name>` (default `falco-lab`; optional delete first with `recreate=true`).
+* **Kubernetes Manifests** (`deploy_falcosidekick_to_kubernetes`, `deploy_sample_k8s_workloads`): `kubectl apply` of embedded manifests: Falcosidekick + UI Deployments/Services in namespace `falco`; `web-frontend` (`nginx:1.25`, namespace `default`) and `node-exporter` (`prom/node-exporter:v1.8.0`, namespace `monitoring`) Deployments.
+* **Falco Install** (`install_falco_to_kubernetes`): `helm upgrade --install falco falcosecurity/falco` in namespace `falco` with `driver.kind=modern_ebpf`, `falcosidekick.enabled=true`, `falcosidekick.webui.enabled=true`. Without Helm it only applies the Falcosidekick manifests (no Falco engine).
+* **Test Alerts** (`dispatch_test_falco_alert`): POSTs a sample event to `<daemon_url>/` (default `http://localhost:2801/`) with the current timestamp:
+  * `shell_in_container`: interactive `bash` in an `nginx:1.25` container.
+  * `write_below_etc`: `node-exporter` writing to `/etc/resolv.conf`.
+  * `read_sensitive_file`: `datadog-agent` reading `/etc/shadow`.
+  * Templates use fixed sample pod names; override with `k8s_ns`, `k8s_pod`, `proc_name`, `container_image`.
 
 ---
 
@@ -359,8 +375,8 @@ kubectl port-forward -n falco svc/falco-falcosidekick-ui 2802:2802
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/falco-triage-mcp.git
-cd falco-triage-mcp
+git clone https://github.com/ritvikindupuri/FalcoMCP.git
+cd FalcoMCP
 
 # 2. Create isolated virtual environment
 uv venv
@@ -383,10 +399,12 @@ Falco-Triage communicates over standard Model Context Protocol (stdio / JSON-RPC
 | **Cursor** | `.cursor/mcp.json` or Settings UI | `uv --directory <path> run falco-triage` |
 | **Claude Code (CLI)** | `~/.claude.json` or `claude mcp add` | `claude mcp add falco-triage uv -- --directory <path> run falco-triage` |
 | **Claude Desktop** | `%APPDATA%\Claude\claude_desktop_config.json` (Win) / `~/Library/Application Support/Claude/...` (Mac) | `command: "uv"`, `args: ["--directory", "<path>", "run", "falco-triage"]` |
-| **Google Antigravity** | `~/.gemini/config/mcp_config.json` | Python venv direct invocation with `PYTHONPATH` |
+| **Google Antigravity** | `~/.gemini/config/mcp_config.json` | `command: "uv"`, `args: ["--directory", "<path>", "run", "falco-triage"]`, or direct venv Python (`-m falco_triage.server`) with `PYTHONPATH=<path>/src` |
 | **Windsurf (Codeium)** | `~/.codeium/windsurf/mcp_config.json` | `command: "uv"`, `args: ["--directory", "<path>", "run", "falco-triage"]` |
 | **VS Code (Cline / Roo)** | `cline_mcp_settings.json` | Stdio runner configuration |
 | **Codex / OpenAI Agents**| Agent Environment Config | `uv --directory <path> run falco-triage` |
+
+> **Note:** The repository's `mcp_config.json` uses the direct venv-Python form but hardcodes the author's Windows paths (`C:\Users\ritvi\.gemini\antigravity\scratch\falco-triage-mcp\...`). Replace the `command` and `PYTHONPATH` values with your own clone's paths before using it.
 
 ---
 ## 6. Data Contracts & Schema Specifications
@@ -451,10 +469,14 @@ Falco-Triage communicates over standard Model Context Protocol (stdio / JSON-RPC
     {
       "name": "node-exporter",
       "image": "prom/node-exporter:v1.8.0",
+      "command": null,
+      "args": ["--path.procfs=/host/proc"],
       "security_context": {
         "privileged": false,
         "read_only_root_filesystem": true,
         "run_as_user": 0,
+        "run_as_non_root": false,
+        "allow_privilege_escalation": false,
         "capabilities": {
           "add": ["SYS_TIME"],
           "drop": ["ALL"]
@@ -468,9 +490,13 @@ Falco-Triage communicates over standard Model Context Protocol (stdio / JSON-RPC
       "path": "/proc",
       "type": ""
     }
-  ]
+  ],
+  "phase": "Running",
+  "pod_ip": "10.244.0.12"
 }
 ```
+
+Values above are illustrative. `security_context` is `{}` when a container sets none.
 
 ---
 
@@ -478,57 +504,60 @@ Falco-Triage communicates over standard Model Context Protocol (stdio / JSON-RPC
 
 | Guardrail ID | Objective | Enforcement Mechanism |
 | :--- | :--- | :--- |
-| **SEC-01** | Prevent silencing core exploits | `rules/AGENTS.md` forbids generating exceptions for alerts rated `CRITICAL`, `ALERT`, or `EMERGENCY` without explicit manual confirmation and workload correlation. |
-| **SEC-02** | Least-privilege exception scoping | Exception engine requires at least 3 dimensions (`namespace`, `process`, `image`) for any synthesized exception. |
-| **SEC-03** | Schema syntax safety | Every exception must pass `validate_falco_rule` filtercheck AST checking before disk writing. |
-| **SEC-04** | Active threat quarantine | Interactive shells and untrusted network egress trigger `generate_pod_isolation_policy` recommendation instead of rule muting. |
+| **SEC-01** | Prevent silencing core exploits | Instruction in `rules/AGENTS.md`: never silence `CRITICAL`/`ALERT`/`EMERGENCY` alerts with loose process-level exceptions; correlate the workload first. Not enforced by code. |
+| **SEC-02** | Least-privilege exception scoping | `least_privilege` is the default strategy (3 fields, +`fd.name` for file events) and `rules/AGENTS.md` forbids `proc.name`-only scoping. The code still accepts `process_only`. |
+| **SEC-03** | Schema syntax safety | `generate_falco_exception` validates its output; `rules/AGENTS.md` instructs running `validate_falco_rule` before writing. `append_falco_exception_to_file` does not validate. |
+| **SEC-04** | Active threat quarantine | Instruction in `rules/AGENTS.md` to propose `generate_pod_isolation_policy` instead of muting. The policy is returned as YAML only, never applied. |
+| **SEC-05** | Human approval | Write/quarantine tools return `requires_human_approval: true` and `approval_options`; `rules/AGENTS.md` asks the client to prompt the user. Enforcement is up to the MCP client. |
+| **SEC-06** | Input hardening (code-enforced) | URL params must be `http`/`https` with a host; file paths must have an allowed extension (rules: `.yaml`/`.yml`/`.json`; logs: `.json`/`.jsonl`/`.log`/`.txt`). |
+| **SEC-07** | Read-only cluster access (code) | The server only reads from the Kubernetes API (`read_namespaced_pod`, version, `list_node`). Cluster changes happen only through the Path 2 lab tools, which shell out to `kubectl`/`helm`/`kind`. |
 
 ---
 
 ## 8. Verification & Test Matrix
 
-The test suite is implemented using `pytest` and `pytest-asyncio`, covering unit logic, schema conformity, and end-to-end integration:
+The test suite (16 tests) uses `pytest` and `pytest-asyncio`. Output of `pytest -v` at commit `6e75cec`:
 
 ```
-============================= test session starts =============================
-platform win32 -- Python 3.12.12, pytest-9.1.1, pluggy-1.6.0
-rootdir: C:\Users\ritvi\.gemini\antigravity\scratch\falco-triage-mcp
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.1.1, pluggy-1.6.0
 configfile: pyproject.toml
-plugins: anyio-4.15.1, asyncio-1.4.0
+plugins: asyncio-1.4.0, anyio-4.15.1
+collected 16 items
 
-tests/test_exception_engine.py::test_create_structured_exception PASSED      [  6%]
+tests/test_exception_engine.py::test_create_structured_exception PASSED  [  6%]
 tests/test_exception_engine.py::test_synthesize_least_privilege_exception PASSED [ 12%]
-tests/test_exception_engine.py::test_append_and_merge_to_file PASSED         [ 18%]
-tests/test_falco_client.py::test_falco_event_from_dict PASSED                [ 25%]
-tests/test_falco_client.py::test_cluster_alerts PASSED                       [ 31%]
-tests/test_falco_client.py::test_load_events_from_json_file PASSED           [ 37%]
-tests/test_k8s_client.py::test_generate_isolation_network_policy PASSED      [ 43%]
-tests/test_rule_validator.py::test_validate_valid_exception_yaml PASSED      [ 50%]
-tests/test_rule_validator.py::test_detect_invalid_filtercheck_field PASSED   [ 56%]
-tests/test_rule_validator.py::test_detect_mismatched_comps_length PASSED     [ 62%]
-tests/test_server_integration.py::test_server_check_lab_environment PASSED   [ 68%]
-tests/test_server_integration.py::test_server_validate_falco_rule PASSED     [ 75%]
+tests/test_exception_engine.py::test_append_and_merge_to_file PASSED     [ 18%]
+tests/test_falco_client.py::test_falco_event_from_dict PASSED            [ 25%]
+tests/test_falco_client.py::test_cluster_alerts PASSED                   [ 31%]
+tests/test_falco_client.py::test_load_events_from_json_file PASSED       [ 37%]
+tests/test_k8s_client.py::test_generate_isolation_network_policy PASSED  [ 43%]
+tests/test_rule_validator.py::test_validate_valid_exception_yaml PASSED  [ 50%]
+tests/test_rule_validator.py::test_detect_invalid_filtercheck_field PASSED [ 56%]
+tests/test_rule_validator.py::test_detect_mismatched_comps_length PASSED [ 62%]
+tests/test_server_integration.py::test_server_check_lab_environment PASSED [ 68%]
+tests/test_server_integration.py::test_server_validate_falco_rule PASSED [ 75%]
 tests/test_server_integration.py::test_server_generate_and_append_exception PASSED [ 81%]
-tests/test_server_integration.py::test_server_ingest_from_file PASSED        [ 87%]
-tests/test_server_integration.py::test_server_isolation_policy PASSED        [ 93%]
-tests/test_server_integration.py::test_server_prompts PASSED                 [100%]
+tests/test_server_integration.py::test_server_ingest_from_file PASSED    [ 87%]
+tests/test_server_integration.py::test_server_isolation_policy PASSED    [ 93%]
+tests/test_server_integration.py::test_server_prompts PASSED             [100%]
 
-============================= 16 passed in 14.05s =============================
+============================== 16 passed in 0.90s ==============================
 ```
 
 ### Key Verification Milestones:
-1. **YAML Merging Stability**: Verified that multiple distinct exception tuples merge into the same rule block without duplicating parent rule declarations.
-2. **AST Filtercheck Verification**: Verified that misspelled fields (e.g. `proc.cmdlie`) trigger warnings with fuzzy-match suggestions (`proc.cmdline`).
-3. **Resilient NetworkPolicy Synthesis**: Verified that isolation policies generate valid Kubernetes YAML even when target clusters are offline.
-4. **End-to-End Server Integration**: Verified that all 10 MCP tools and 4 prompts execute and return structured JSON schemas conforming to MCP 2.0 specifications.
+1. **YAML Merging**: A second exception with the same rule and name merges its value rows into the existing block (`action: "merged"`). Comment preservation is not asserted.
+2. **Filtercheck Verification**: A misspelled field (`proc.cmdlie`) is reported with a fuzzy-match suggestion (`proc.cmdline`).
+3. **NetworkPolicy Synthesis**: Isolation policies are generated without a reachable cluster (falling back to an `app: <pod_name>` selector).
+4. **Server Integration**: 6 of the 13 tools (`check_lab_environment`, `validate_falco_rule`, `generate_falco_exception`, `append_falco_exception_to_file`, `ingest_falco_alerts` from a file, `generate_pod_isolation_policy`) and all 5 prompts are called directly. `test_server_check_lab_environment` passes whether or not Docker/Kubernetes/Falcosidekick are running. The Falcosidekick UI API path and the lab bootstrap tools are not tested.
 
 ---
 
 ## 9. Conclusion
 
-**Falco-Triage** transforms how container security engineers interact with runtime threat detection. By combining a rich **Skill SOP (The Brain)** with high-performance **MCP Server Tools (The Hands)**, the system eliminates the friction of Falco alert tuning and incident response. 
+**Falco-Triage** transforms how container security engineers interact with runtime threat detection. It pairs a runbook and agent instructions (`SKILL.md`, `AGENTS.md`) with MCP tools that read alerts and pods, synthesize and validate exceptions, and generate quarantine policies. 
 
-Whether an engineer is actively drowning in production alert noise or spinning up a local sandbox for the first time, Falco-Triage provides an automated, least-privilege, and syntax-verified copilot that reduces triage times from hours to seconds while maintaining strict operational guardrails.
+Whether an engineer is actively drowning in production alert noise or spinning up a local sandbox for the first time, Falco-Triage helps produce least-privilege, schema-checked exceptions while leaving cluster changes and approval decisions to the engineer and the MCP client.
 
 
 
