@@ -76,6 +76,9 @@ graph TB
     end
 ```
 
+<p align="center">
+  <img src="./assets/architecture.png" alt="Falco-Triage Visual Architecture Diagram" width="850" />
+</p>
 <p align="center"><b>Figure 1: Falco-Triage End-to-End System Architecture</b></p>
 
 ### Flow-by-Flow Explanation of the Architecture
