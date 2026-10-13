@@ -334,7 +334,7 @@ You should see:
 
 ### Step 4: Connect Falco-Triage to Your AI Assistant (All Major Clients)
 
-Pick your AI client below and follow the copy-and-paste configuration:
+Pick your AI client below. Replace `/path/to/FalcoMCP` (or `C:\\path\\to\\FalcoMCP` on Windows) with the absolute path where you cloned the repository in [Step 2](#step-2-install-falco-triage).
 
 #### 1. Cursor
 You can configure Falco-Triage in Cursor via either the UI or a project file:
@@ -348,7 +348,7 @@ You can configure Falco-Triage in Cursor via either the UI or a project file:
         "command": "uv",
         "args": [
           "--directory",
-          "C:\\Users\\ritvi\\.gemini\\antigravity\\scratch\\falco-triage-mcp",
+          "/path/to/FalcoMCP",
           "run",
           "falco-triage"
         ]
@@ -356,7 +356,7 @@ You can configure Falco-Triage in Cursor via either the UI or a project file:
     }
   }
   ```
-  *(On macOS/Linux, change the directory to your absolute path, e.g. `/home/user/falco-triage-mcp`)*
+  *(On Windows, use escaped backslashes: `"C:\\Users\\<username>\\FalcoMCP"`)*
 
 * **Method B: Cursor Settings UI**  
   1. Open Cursor and navigate to **Cursor Settings (`Ctrl+,` or `Cmd+,`) > Features > MCP**.
@@ -364,7 +364,7 @@ You can configure Falco-Triage in Cursor via either the UI or a project file:
   3. Enter:
      * **Name**: `falco-triage`
      * **Type**: `command`
-     * **Command**: `uv --directory "C:\Users\ritvi\.gemini\antigravity\scratch\falco-triage-mcp" run falco-triage`
+     * **Command**: `uv --directory "/path/to/FalcoMCP" run falco-triage`
   4. Click **Save**. The status indicator will turn green.
 
 ---
@@ -373,8 +373,8 @@ You can configure Falco-Triage in Cursor via either the UI or a project file:
 If you use Anthropic's **Claude Code** terminal CLI:
 
 ```bash
-# Run this command in your terminal
-claude mcp add falco-triage uv -- --directory "C:\Users\ritvi\.gemini\antigravity\scratch\falco-triage-mcp" run falco-triage
+# Terminal command (Linux / macOS / Windows PowerShell):
+claude mcp add falco-triage uv -- --directory "/path/to/FalcoMCP" run falco-triage
 ```
 
 Or add it directly to your `~/.claude.json` configuration file:
@@ -385,7 +385,7 @@ Or add it directly to your `~/.claude.json` configuration file:
       "command": "uv",
       "args": [
         "--directory",
-        "C:\\Users\\ritvi\\.gemini\\antigravity\\scratch\\falco-triage-mcp",
+        "/path/to/FalcoMCP",
         "run",
         "falco-triage"
       ]
@@ -400,6 +400,7 @@ Or add it directly to your `~/.claude.json` configuration file:
 Add `falco-triage` to your `claude_desktop_config.json`:
 * **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
 * **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+* **Linux**: `~/.config/Claude/claude_desktop_config.json`
 
 ```json
 {
@@ -408,7 +409,7 @@ Add `falco-triage` to your `claude_desktop_config.json`:
       "command": "uv",
       "args": [
         "--directory",
-        "C:\\Users\\ritvi\\.gemini\\antigravity\\scratch\\falco-triage-mcp",
+        "/path/to/FalcoMCP",
         "run",
         "falco-triage"
       ]
@@ -423,25 +424,24 @@ Add `falco-triage` to your `claude_desktop_config.json`:
 #### 4. Google Antigravity & Gemini CLI
 Add `falco-triage` to your global `~/.gemini/config/mcp_config.json`:
 * **Windows**: `C:\Users\<username>\.gemini\config\mcp_config.json`
-* **Linux/macOS**: `~/.gemini/config/mcp_config.json`
+* **Linux / macOS**: `~/.gemini/config/mcp_config.json`
 
 ```json
 {
   "mcpServers": {
     "falco-triage": {
-      "command": "C:\\Users\\ritvi\\.gemini\\antigravity\\scratch\\falco-triage-mcp\\.venv\\Scripts\\python.exe",
+      "command": "uv",
       "args": [
-        "-m",
-        "falco_triage.server"
-      ],
-      "env": {
-        "PYTHONPATH": "C:\\Users\\ritvi\\.gemini\\antigravity\\scratch\\falco-triage-mcp\\src"
-      }
+        "--directory",
+        "/path/to/FalcoMCP",
+        "run",
+        "falco-triage"
+      ]
     }
   }
 }
 ```
-> *To enable the companion skills and rules, copy the `falco-triage` folder into `~/.gemini/config/plugins/falco-triage/`.*
+> *To enable companion skills and rules in Antigravity, copy the plugin folder into `~/.gemini/config/plugins/falco-triage/`.*
 
 ---
 
@@ -455,7 +455,7 @@ Add `falco-triage` to your Windsurf MCP configuration file at `~/.codeium/windsu
       "command": "uv",
       "args": [
         "--directory",
-        "C:\\Users\\ritvi\\.gemini\\antigravity\\scratch\\falco-triage-mcp",
+        "/path/to/FalcoMCP",
         "run",
         "falco-triage"
       ]
@@ -478,7 +478,7 @@ For **Cline** or **Roo Code**:
       "command": "uv",
       "args": [
         "--directory",
-        "C:\\Users\\ritvi\\.gemini\\antigravity\\scratch\\falco-triage-mcp",
+        "/path/to/FalcoMCP",
         "run",
         "falco-triage"
       ]
@@ -492,7 +492,7 @@ For **Cline** or **Roo Code**:
 #### 7. OpenAI Codex & Custom Agent Runtimes
 For custom agents using Python or Node.js to spawn MCP processes over stdio:
 * **Executable**: `uv`
-* **Invocation Arguments**: `["--directory", "/path/to/falco-triage-mcp", "run", "falco-triage"]`
+* **Invocation Arguments**: `["--directory", "/path/to/FalcoMCP", "run", "falco-triage"]`
 * **Direct Python Binary Alternative**:
   * Command: `/path/to/falco-triage-mcp/.venv/bin/python` (or `.venv\Scripts\python.exe` on Windows)
   * Args: `["-m", "falco_triage.server"]`
