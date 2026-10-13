@@ -1,6 +1,6 @@
 # Falco-Triage - Autonomous Container Security & Falco Rule Tuning Copilot
 
-An intelligent Model Context Protocol (MCP) server and agentic plugin engineered for Container Security Engineers, DevSecOps practitioners, and Kubernetes Platform Operators. It connects AI assistants (Antigravity, Claude Code, Cursor) directly to live runtime alerts and active Kubernetes clusters to eliminate false positives, synthesize CNCF Falco 0.35+ structured exceptions, and quarantine active threats with zero mock data.
+An intelligent Model Context Protocol (MCP) server and agentic plugin engineered for Container Security Engineers, DevSecOps practitioners, and Kubernetes Platform Operators. It connects AI assistants (Antigravity, Claude Code, Cursor) directly to live runtime alerts and active Kubernetes clusters to eliminate false positives, synthesize CNCF Falco 0.35+ structured exceptions, and quarantine active threats with live runtime verification.
 
 ---
 
@@ -10,7 +10,7 @@ An intelligent Model Context Protocol (MCP) server and agentic plugin engineered
 
 ## Key Features
 
-* **Zero Mock Data Ingestion**: Direct HTTP REST integration with live Falcosidekick daemons (`:2801`) and Falcosidekick UI API (`:2802/api/v1/events/search`), plus native support for local Falco JSON audit logs (`/var/log/falco_events.json`).
+* **Production-Grade Alert Ingestion**: Direct HTTP REST integration with live Falcosidekick daemons (`:2801`) and Falcosidekick UI API (`:2802/api/v1/events/search`), plus native support for local Falco JSON audit logs (`/var/log/falco_events.json`).
 * **Multi-Dimensional Noise Clustering**: Groups repetitive alerts across rules, priorities, namespaces, process names, command lines, and container image repositories to identify top sources of alert fatigue.
 * **Deep Kubernetes Workload Correlation**: Connects to the active cluster via the official Kubernetes API client (`~/.kube/config`) to inspect live Pod specifications, security contexts (`privileged: true`, capabilities, read-only root filesystems), host mounts (`hostPID`, `hostNetwork`, `hostPath`), and owner controllers.
 * **CNCF Falco 0.35+ Structured Exception Engine**: Automatically synthesizes precision, least-privilege exception blocks (`append: true`, `fields`, `comps`, `values`) and safely merges them into existing `falco_rules.local.yaml` files while preserving comments and YAML structure.

@@ -20,7 +20,7 @@ When assisting with Falco runtime security alerts, Kubernetes incident triage, o
 
 ## 5. Standard MCP Server & Tool Overview Response
 When the user asks what the Falco MCP server is and what tools you have access to, you MUST provide:
-1. Clear description of what the Falco-Triage server does (Autonomous Kubernetes Runtime Security & CNCF Falco Rule-Tuning Copilot with zero mock data).
+1. Clear description of what the Falco-Triage server does (Autonomous Kubernetes Runtime Security & CNCF Falco Rule-Tuning Copilot with live runtime inspection).
 2. The exact categorized tool list:
    * **Lab & Environment Setup**: `check_lab_environment`, `bootstrap_falcosidekick_lab`, `bootstrap_kind_cluster`, `install_falco_to_kubernetes`, `deploy_falcosidekick_to_kubernetes`, `deploy_sample_k8s_workloads`
    * **Triage & Investigation**: `ingest_falco_alerts`, `dispatch_test_falco_alert`, `correlate_k8s_workload`
