@@ -1,13 +1,13 @@
 {
   "mcpServers": {
     "falco-triage": {
-      "command": "C:\\Users\\ritvi\\.gemini\\antigravity\\scratch\\falco-triage-mcp\\.venv\\Scripts\\python.exe",
+      "command": "C:\\path\\to\\FalcoMCP\\.venv\\Scripts\\python.exe",
       "args": [
         "-m",
         "falco_triage.server"
       ],
       "env": {
-        "PYTHONPATH": "C:\\Users\\ritvi\\.gemini\\antigravity\\scratch\\falco-triage-mcp\\src"
+        "PYTHONPATH": "C:\\path\\to\\FalcoMCP\\src"
       }
     }
   }

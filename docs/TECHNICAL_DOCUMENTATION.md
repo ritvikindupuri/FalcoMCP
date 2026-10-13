@@ -404,7 +404,7 @@ Falco-Triage communicates over standard Model Context Protocol (stdio / JSON-RPC
 | **VS Code (Cline / Roo)** | `cline_mcp_settings.json` | Stdio runner configuration |
 | **Codex / OpenAI Agents**| Agent Environment Config | `uv --directory <path> run falco-triage` |
 
-> **Note:** The repository's `mcp_config.json` uses the direct venv-Python form but hardcodes the author's Windows paths (`C:\Users\ritvi\.gemini\antigravity\scratch\falco-triage-mcp\...`). Replace the `command` and `PYTHONPATH` values with your own clone's paths before using it.
+> **Note:** The repository's own `mcp_config.json` uses this direct-Python form with placeholder Windows paths (`C:\path\to\FalcoMCP\...`). Replace both the `command` and `PYTHONPATH` values with the paths of your own clone and virtualenv.
 
 ---
 ## 6. Data Contracts & Schema Specifications

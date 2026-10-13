@@ -452,7 +452,7 @@ For custom agents using Python or Node.js to spawn MCP processes over stdio:
   * Environment: `{"PYTHONPATH": "/path/to/FalcoMCP/src"}`
 
 > [!NOTE]
-> The repository's own `mcp_config.json` uses this direct-Python form but hardcodes the author's Windows paths (`C:\Users\ritvi\.gemini\antigravity\scratch\falco-triage-mcp\...`). If you copy it, replace both the `command` and `PYTHONPATH` values with the paths of your own clone and virtualenv.
+> The repository's own `mcp_config.json` uses this direct-Python form with placeholder Windows paths (`C:\path\to\FalcoMCP\...`). Replace both the `command` and `PYTHONPATH` values with the paths of your own clone and virtualenv.
 
 ---
 
