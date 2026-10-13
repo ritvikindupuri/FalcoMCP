@@ -301,8 +301,8 @@ Clone the repository and set up the local virtual environment:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-org/falco-triage-mcp.git
-cd falco-triage-mcp
+git clone https://github.com/ritvikindupuri/FalcoMCP.git
+cd FalcoMCP
 
 # 2. Create an isolated virtual environment with uv
 uv venv
@@ -310,6 +310,9 @@ uv venv
 # 3. Install the application and all dependencies in editable mode
 uv pip install -e ".[dev]"
 ```
+
+> [!TIP]
+> **Directory Path Note**: If you cloned to a different path (e.g. `C:\Users\username\FalcoMCP` or `/home/user/FalcoMCP`), use that directory in the client configuration commands in [Step 4](#step-4-connect-falco-triage-to-your-ai-assistant-all-major-clients) below.
 
 ---
 
