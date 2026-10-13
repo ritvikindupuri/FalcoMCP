@@ -513,8 +513,8 @@ The moment you ask your assistant *"What is the Falco MCP server and what tools 
 | **Server & Tools Discovery** | `"What is the Falco MCP server and what tools do you have access to?"` | Discovery |
 | **Real Test Data with Docker, Falco & K8s** | `"I have Docker, Kubernetes, and Falco installed per the setup guide. Please inspect my cluster, spin up sample Nginx and node-exporter workloads, deploy the Falcosidekick UI forwarder, and dispatch test alerts so I can test rule tuning."` | Path 2 (Testing) |
 | **Live Noise Reduction & Clustering** | `"Run ingest_falco_alerts to pull recent alerts from our Falcosidekick deployment at http://localhost:2802, cluster them by rule, and show me the top false positives."` | Path 1 (Production) |
-| **Precision Rule Tuning** | `"We are getting hundreds of alerts from 'Read sensitive file untrusted' on datadog-agent in namespace monitoring. Correlate the pod and generate a least-privilege Falco structured exception."` | Path 1 (Production) |
-| **Immediate Threat Quarantine** | `"Investigate pod web-frontend in namespace default using correlate_k8s_workload. If an unexpected interactive shell spawned, generate a zero-trust NetworkPolicy to isolate it immediately."` | Path 1 (Containment) |
+| **Precision Rule Tuning** | `"We are getting hundreds of alerts from '<Rule Name>' on <pod-name> in namespace <namespace>. Correlate the pod and generate a least-privilege Falco structured exception."` | Path 1 (Production) |
+| **Immediate Threat Quarantine** | `"Investigate pod <pod-name> in namespace <namespace> using correlate_k8s_workload. If an unexpected interactive shell spawned, generate a zero-trust NetworkPolicy to isolate it immediately."` | Path 1 (Containment) |
 | **Docker-Only Lightweight Lab** | `"Launch a fresh Falcosidekick testing lab in Docker using bootstrap_falcosidekick_lab and send a test shell_in_container alert."` | Path 2 (Containers) |
 | **Offline Rule Linting & Exception Synthesis** | `"Validate this Falco rule YAML and tell me if the filtercheck fields, operators, and tuple structures conform to CNCF Falco 0.35+ specs."` | Path 1 & 2 (Offline) |
 
