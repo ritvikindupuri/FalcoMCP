@@ -27,3 +27,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/falco_triage"]
+
+[dependency-groups]
+dev = [
+    "pillow>=12.3.0",
+]
