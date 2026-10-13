@@ -1,10 +1,10 @@
-# Falco-Triage  Autonomous Container Security & Falco Rule Tuning Copilot
+# Falco-Triage - Autonomous Container Security & Falco Rule Tuning Copilot
 
 An intelligent Model Context Protocol (MCP) server and agentic plugin engineered for Container Security Engineers, DevSecOps practitioners, and Kubernetes Platform Operators. It connects AI assistants (Antigravity, Claude Code, Cursor) directly to live runtime alerts and active Kubernetes clusters to eliminate false positives, synthesize CNCF Falco 0.35+ structured exceptions, and quarantine active threats with zero mock data.
 
 ---
 
-?? **Full Technical Documentation**: Read the complete [Technical Documentation & Architecture Specification](./docs/TECHNICAL_DOCUMENTATION.md) for in-depth subsystem breakdowns, data contracts, and security specifications.
+ **Full Technical Documentation**: Read the complete [Technical Documentation & Architecture Specification](./docs/TECHNICAL_DOCUMENTATION.md) for in-depth subsystem breakdowns, data contracts, and security specifications.
 
 ---
 
@@ -644,7 +644,11 @@ uv run pytest -v
 
 ## License
 
-This project is licensed under the Apache 2.0 License. Conforms to CNCF Falco specifications.
-
-
-
+This project is licensed under the Apache 2.0 License. Conforms to CNCF Falco specifications.
+
+
+
+
+
+
+
