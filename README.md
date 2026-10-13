@@ -25,61 +25,10 @@ An intelligent Model Context Protocol (MCP) server and agentic plugin engineered
 
 ## System Architecture
 
-```mermaid
-graph TB
-    subgraph Client ["Client & AI Interface"]
-        User["Security Engineer"]
-        Agent["AI Assistant (Antigravity / Claude Code)"]
-        User -->|"Natural Language Request"| Agent
-    end
-
-    subgraph Plugin ["Falco-Triage Plugin & MCP Server"]
-        MCP["MCP Transport Server (JSON-RPC)"]
-        SOP["SKILL.md (Triage SOP & Runbook)"]
-        Rules["AGENTS.md (Security Guardrails)"]
-        
-        Agent -->|"Consults SOP"| SOP
-        Agent -->|"Enforces Rules"| Rules
-        Agent -->|"Executes Tools"| MCP
-
-        subgraph CoreSubsystems ["Core Subsystems"]
-            In["Alert Ingestion Engine"]
-            K8s["K8s Workload Correlator"]
-            Exc["CNCF Exception Engine"]
-            Val["AST & Filtercheck Validator"]
-            Iso["NetworkPolicy Quarantine"]
-            Boot["Lab Bootstrapper & Simulator"]
-        end
-
-        MCP --> In
-        MCP --> K8s
-        MCP --> Exc
-        MCP --> Val
-        MCP --> Iso
-        MCP --> Boot
-    end
-
-    subgraph Targets ["Live Target Infrastructure"]
-        UI["Falcosidekick UI API (:2802)"]
-        Daemon["Falcosidekick Daemon (:2801)"]
-        K8sCluster["Live Kubernetes Cluster"]
-        Docker["Docker Engine Daemon"]
-        LocalRules["falco_rules.local.yaml"]
-
-        In -->|"GET /api/v1/events"| UI
-        Boot -->|"POST /"| Daemon
-        K8s -->|"GET /api/v1/pods"| K8sCluster
-        Iso -->|"POST NetworkPolicy"| K8sCluster
-        Boot -->|"Docker API / Kind"| Docker
-        Exc -->|"ruamel.yaml merge"| LocalRules
-        Val -.->|"Pre-Flight Lint"| Exc
-    end
-```
-
 <p align="center">
-  <img src="./assets/architecture.png" alt="Falco-Triage Visual Architecture Diagram" width="850" />
+  <img src="https://raw.githubusercontent.com/ritvikindupuri/FalcoMCP/main/assets/architecture.png" alt="Falco-Triage System Architecture Diagram" width="100%" />
 </p>
-<p align="center"><b>Figure 1: Falco-Triage End-to-End System Architecture</b></p>
+<p align="center"><b>Figure 1: Falco-Triage End-to-End System Architecture & Workflow</b></p>
 
 ### Flow-by-Flow Explanation of the Architecture
 
