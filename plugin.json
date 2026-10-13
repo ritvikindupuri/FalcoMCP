@@ -1,0 +1,5 @@
+{
+  "name": "falco-triage",
+  "description": "Container Security & Falco Rule Tuning Copilot for Kubernetes SecOps",
+  "version": "0.1.0"
+}

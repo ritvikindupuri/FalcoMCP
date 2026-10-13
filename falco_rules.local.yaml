@@ -1,0 +1,19 @@
+- rule: Write below etc
+  append: true
+  exceptions:
+  - name: allow_node_exporter_write_below_etc
+    fields:
+    - k8s.ns.name
+    - proc.name
+    - container.image.repository
+    - fd.name
+    comps:
+    - '='
+    - '='
+    - '='
+    - startswith
+    values:
+    - - monitoring
+      - node-exporter
+      - prom/node-exporter
+      - /etc/resolv.conf
